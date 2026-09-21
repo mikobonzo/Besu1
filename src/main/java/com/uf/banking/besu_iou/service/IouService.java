@@ -74,8 +74,9 @@ public class IouService {
     public IouResponse get(String hexId) throws IOException {
         byte[] id = parseBytes32(hexId);
         Function function = new Function("getIou", List.of(new Bytes32(id)), List.of(
-                new TypeReference<Address>() {}, new TypeReference<Uint256>() {},
-                new TypeReference<Bytes32>() {}, new TypeReference<Uint8>() {}));
+                new TypeReference<Address>() {}, new TypeReference<Address>() {},
+                new TypeReference<Uint256>() {}, new TypeReference<Bytes32>() {},
+                new TypeReference<Uint8>() {}));
         EthCall call = web3j.ethCall(
                 Transaction.createEthCallTransaction(ZERO_ADDRESS, requireContractAddress(),
                         FunctionEncoder.encode(function)),
@@ -84,13 +85,13 @@ public class IouService {
             throw new IllegalStateException("Besu eth_call failed: " + call.getError().getMessage());
         }
         List<Type> values = FunctionReturnDecoder.decode(call.getValue(), function.getOutputParameters());
-        if (values.size() != 4) {
+        if (values.size() != 5) {
             throw new IllegalStateException("Unexpected getIou response; verify the deployed contract ABI");
         }
-        String beneficiary = values.get(0).getValue().toString();
-        BigInteger amount = (BigInteger) values.get(1).getValue();
-        String currency = bytes32ToString((byte[]) values.get(2).getValue());
-        int status = ((BigInteger) values.get(3).getValue()).intValue();
+        String beneficiary = values.get(1).getValue().toString();
+        BigInteger amount = (BigInteger) values.get(2).getValue();
+        String currency = bytes32ToString((byte[]) values.get(3).getValue());
+        int status = ((BigInteger) values.get(4).getValue()).intValue();
         return new IouResponse(Numeric.toHexString(id), beneficiary, amount,
                 currency, statusName(status));
     }

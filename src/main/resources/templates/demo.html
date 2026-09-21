@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Besu QBFT IOU Look-Over</title>
+    <link rel="stylesheet" th:href="@{/css/demo.css}" href="/css/demo.css">
+</head>
+<body>
+<header class="hero">
+    <div>
+        <p class="eyebrow">HYPERLEDGER BESU</p>
+        <h1>UF-QBFT IOU</h1>
+        <p class="subtitle">We can then issue/inspect/settle an IOU within a four-validator blockchain.</p>
+    </div>
+    <div id="networkBadge" class="badge badge-waiting">Checking network...</div>
+</header>
+
+<main>
+    <section class="card network-card">
+        <div class="section-heading">
+            <div><span class="step">1</span><h2>Network status</h2></div>
+            <button class="button secondary" type="button" onclick="refreshNetwork()">Refresh</button>
+        </div>
+        <div class="metrics">
+            <div class="metric"><span>Chain ID</span><strong id="chainId">-</strong></div>
+            <div class="metric"><span>Block</span><strong id="blockNumber">-</strong></div>
+            <div class="metric"><span>Peers</span><strong id="peerCount">-</strong></div>
+            <div class="metric"><span>Listening</span><strong id="listening">-</strong></div>
+        </div>
+    </section>
+
+    <div class="columns">
+        <section class="card">
+            <div class="section-heading"><div><span class="step">2</span><h2>Issue an IOU</h2></div></div>
+            <form id="issueForm">
+                <label>External reference
+                    <input id="externalReference" maxlength="200" required>
+                </label>
+                <label>Beneficiary address
+                    <input id="beneficiary" pattern="^0x[0-9a-fA-F]{40}$" required
+                           value="0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266">
+                </label>
+                <div class="form-row">
+                    <label>Amount (minor units)
+                        <input id="amountMinorUnits" type="number" min="1" value="250000" required>
+                    </label>
+                    <label>Currency
+                        <input id="currency" pattern="^[A-Z]{3}$" maxlength="3" value="MYR" required>
+                    </label>
+                </div>
+                <p class="hint">Example: 250000 minor units = MYR 2,500.00.</p>
+                <button id="issueButton" class="button primary" type="submit">Issue IOU</button>
+            </form>
+        </section>
+
+        <section class="card">
+            <div class="section-heading"><div><span class="step">3</span><h2>Inspect or settle</h2></div></div>
+            <label>IOU ID
+                <textarea id="iouId" rows="3" placeholder="The issued IOU ID appears here"></textarea>
+            </label>
+            <div class="button-row">
+                <button class="button secondary" type="button" onclick="lookupIou()">Read IOU</button>
+                <button class="button danger" type="button" onclick="settleIou()">Settle IOU</button>
+            </div>
+            <div id="iouDetails" class="details empty">No IOU loaded.</div>
+        </section>
+    </div>
+
+    <section class="card activity-card">
+        <div class="section-heading">
+            <div><span class="step">4</span><h2>Demo activity</h2></div>
+            <button class="button text" type="button" onclick="clearActivity()">Clear</button>
+        </div>
+        <div id="activity" class="activity"><p class="muted">Actions and blockchain results will appear here.</p></div>
+    </section>
+</main>
+
+<footer>Interfacing within local POC. No fiat settlement here.</footer>
+
+<script>
+    const $ = (id) => document.getElementById(id);
+
+    function initialReference() {
+        const now = new Date();
+        const stamp = now.toISOString().replace(/[-:TZ.]/g, '').slice(0, 14);
+        $('externalReference').value = `UF-DEMO-${stamp}`;
+    }
+
+    async function api(url, options = {}) {
+        const response = await fetch(url, options);
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(body.message || `HTTP ${response.status}`);
+        return body;
+    }
+
+    function addActivity(title, data, type = 'success') {
+        const activity = $('activity');
+        if (activity.querySelector('.muted')) activity.innerHTML = '';
+        const item = document.createElement('article');
+        item.className = `activity-item ${type}`;
+        const heading = document.createElement('strong');
+        heading.textContent = title;
+        const time = document.createElement('time');
+        time.textContent = new Date().toLocaleTimeString();
+        const pre = document.createElement('pre');
+        pre.textContent = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+        item.append(heading, time, pre);
+        activity.prepend(item);
+    }
+
+    async function refreshNetwork() {
+        const badge = $('networkBadge');
+        badge.className = 'badge badge-waiting';
+        badge.textContent = 'Checking network...';
+        try {
+            const data = await api('/api/network/status');
+            $('chainId').textContent = data.chainId;
+            $('blockNumber').textContent = data.blockNumber;
+            $('peerCount').textContent = data.peerCount;
+            $('listening').textContent = data.listening ? 'Yes' : 'No';
+            badge.className = 'badge badge-online';
+            badge.textContent = `Online - ${data.peerCount} peers`;
+        } catch (error) {
+            badge.className = 'badge badge-offline';
+            badge.textContent = 'Besu unavailable';
+            addActivity('Network check failed', error.message, 'error');
+        }
+    }
+
+    $('issueForm').addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const button = $('issueButton');
+        button.disabled = true;
+        button.textContent = 'Submitting...';
+        const body = {
+            externalReference: $('externalReference').value.trim(),
+            beneficiary: $('beneficiary').value.trim(),
+            amountMinorUnits: Number($('amountMinorUnits').value),
+            currency: $('currency').value.trim().toUpperCase()
+        };
+        try {
+            const result = await api('/api/ious', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(body)
+            });
+            $('iouId').value = result.iouId;
+            addActivity('IOU issued and mined', result);
+            await lookupIou();
+            initialReference();
+            await refreshNetwork();
+        } catch (error) {
+            addActivity('Issue failed', error.message, 'error');
+        } finally {
+            button.disabled = false;
+            button.textContent = 'Issue IOU';
+        }
+    });
+
+    async function lookupIou() {
+        const id = $('iouId').value.trim();
+        if (!id) return addActivity('Read failed', 'Enter or issue an IOU ID first.', 'error');
+        try {
+            const item = await api(`/api/ious/${encodeURIComponent(id)}`);
+            $('iouDetails').className = 'details';
+            $('iouDetails').innerHTML = `
+                <dl><div><dt>Status</dt><dd class="status-${item.status.toLowerCase()}">${item.status}</dd></div>
+                <div><dt>Currency</dt><dd>${item.currency}</dd></div>
+                <div><dt>Minor units</dt><dd>${item.amountMinorUnits}</dd></div>
+                <div><dt>Beneficiary</dt><dd class="address"></dd></div></dl>`;
+            $('iouDetails').querySelector('.address').textContent = item.beneficiary;
+            addActivity('IOU read from blockchain', item);
+        } catch (error) {
+            addActivity('Read failed', error.message, 'error');
+        }
+    }
+
+    async function settleIou() {
+        const id = $('iouId').value.trim();
+        if (!id) return addActivity('Settlement failed', 'Enter or issue an IOU ID first.', 'error');
+        if (!confirm('Settle this IOU on the local QBFT network?')) return;
+        try {
+            const result = await api(`/api/ious/${encodeURIComponent(id)}/settle`, {method: 'POST'});
+            addActivity('IOU settlement mined', result);
+            await lookupIou();
+            await refreshNetwork();
+        } catch (error) {
+            addActivity('Settlement failed', error.message, 'error');
+        }
+    }
+
+    function clearActivity() {
+        $('activity').innerHTML = '<p class="muted">Actions and blockchain results will appear here.</p>';
+    }
+
+    initialReference();
+    refreshNetwork();
+    setInterval(refreshNetwork, 10000);
+</script>
+</body>
+</html>

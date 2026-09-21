@@ -1,0 +1,74 @@
+name: besu-iou-qbft
+
+x-besu-common: &besu-common
+  image: hyperledger/besu:26.6.0
+  restart: unless-stopped
+  environment:
+    BESU_OPTS: "-Xms256m -Xmx768m"
+  networks:
+    - besu
+
+services:
+  validator1:
+    <<: *besu-common
+    container_name: besu-validator1
+    command: ["--config-file=/config/config.toml"]
+    ports:
+      - "127.0.0.1:8545:8545"
+    volumes:
+      - ./network/genesis.json:/config/genesis.json:ro
+      - ./network/node1/config.toml:/config/config.toml:ro
+      - ./network/node1/key:/config/key:ro
+      - ./network/node1/data:/data
+    networks:
+      besu:
+        ipv4_address: 172.28.0.11
+
+  validator2:
+    <<: *besu-common
+    container_name: besu-validator2
+    command: ["--config-file=/config/config.toml"]
+    depends_on: [validator1]
+    volumes:
+      - ./network/genesis.json:/config/genesis.json:ro
+      - ./network/node2/config.toml:/config/config.toml:ro
+      - ./network/node2/key:/config/key:ro
+      - ./network/node2/data:/data
+    networks:
+      besu:
+        ipv4_address: 172.28.0.12
+
+  validator3:
+    <<: *besu-common
+    container_name: besu-validator3
+    command: ["--config-file=/config/config.toml"]
+    depends_on: [validator1]
+    volumes:
+      - ./network/genesis.json:/config/genesis.json:ro
+      - ./network/node3/config.toml:/config/config.toml:ro
+      - ./network/node3/key:/config/key:ro
+      - ./network/node3/data:/data
+    networks:
+      besu:
+        ipv4_address: 172.28.0.13
+
+  validator4:
+    <<: *besu-common
+    container_name: besu-validator4
+    command: ["--config-file=/config/config.toml"]
+    depends_on: [validator1]
+    volumes:
+      - ./network/genesis.json:/config/genesis.json:ro
+      - ./network/node4/config.toml:/config/config.toml:ro
+      - ./network/node4/key:/config/key:ro
+      - ./network/node4/data:/data
+    networks:
+      besu:
+        ipv4_address: 172.28.0.14
+
+networks:
+  besu:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
